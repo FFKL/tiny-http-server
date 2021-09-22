@@ -181,8 +181,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
 
 void serve_static(int fd, char *filename, int filesize)
 {
-  int srcfd;
-  char *srcp, filetype[MAXLINE], buf[MAXBUF];
+  char filetype[MAXLINE], buf[MAXBUF];
 
   /* Send response headers to client */
   get_filetype(filename, filetype);
@@ -193,11 +192,14 @@ void serve_static(int fd, char *filename, int filesize)
   Rio_writen(fd, buf, strlen(buf));
 
   /* Send response body to client */
-  srcfd = Open(filename, O_RDONLY, 0);
-  srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);
+  int srcfd = Open(filename, O_RDONLY, 0);
+  char *srcp = Malloc(filesize);
+  ssize_t read_size = Rio_readn(srcfd, srcp, filesize);
+  if (read_size != (ssize_t)filesize)
+    app_error("Unexpected Error! File not read properly");
   Close(srcfd);
   Rio_writen(fd, srcp, filesize);
-  Munmap(srcp, filesize);
+  Free(srcp);
 }
 
 /*
