@@ -15,6 +15,8 @@
 #include <stdio.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <signal.h>
+#include <errno.h>
 
 #define MAXLINE 8192 /* max text line length */
 #define MAXBUF 8192  /* max I/O buffer size */
@@ -29,6 +31,15 @@ void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 
+void reapChildProcesses(int sig)
+{
+  pid_t pid;
+  while ((pid = wait(NULL)) > 0)
+    printf("Handler reaped child. PID=%d\n", (int)pid);
+  if (errno != ECHILD)
+    unix_error("Waitpid error in sigchid handler");
+}
+
 int main(int argc, char **argv)
 {
   int listenfd, connfd, port, clientlen;
@@ -40,6 +51,11 @@ int main(int argc, char **argv)
     exit(1);
   }
   port = atoi(argv[1]);
+
+  if (signal(SIGCHLD, reapChildProcesses) == SIG_ERR)
+  {
+    unix_error("SIGCHILD error");
+  }
 
   listenfd = Open_listenfd(port);
   while (1)
@@ -219,5 +235,4 @@ void serve_dynamic(int fd, char *filename, char *cgiargs)
     /* Redirect stdout to client */
     Execve(filename, emptylist, environ); /* Run CGI program */
   }
-  Wait(NULL); /* Parent waits for and reaps child */
 }
