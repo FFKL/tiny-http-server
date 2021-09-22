@@ -21,12 +21,15 @@
 #define MAXLINE 8192 /* max text line length */
 #define MAXBUF 8192  /* max I/O buffer size */
 
+#define GET_METHOD "GET"
+#define HEAD_METHOD "HEAD"
+
 extern char **environ; /* defined by libc */
 
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
-void serve_static(int fd, char *filename, int filesize);
+void serve_static(char *method, int fd, char *filename, int filesize);
 void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
@@ -80,7 +83,7 @@ void doit(int fd)
   Rio_readlineb(&rio, buf, MAXLINE);
   sscanf(buf, "%s %s %s", method, uri, version);
 
-  if (strcasecmp(method, "GET"))
+  if (strcasecmp(method, GET_METHOD) && strcasecmp(method, HEAD_METHOD))
   {
     clienterror(fd, method, "501", "Not Implemented", "Tiny does not implement this method");
     return;
@@ -102,7 +105,7 @@ void doit(int fd)
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn’t read the file");
       return;
     }
-    serve_static(fd, filename, sbuf.st_size);
+    serve_static(method, fd, filename, sbuf.st_size);
   }
   else
   { /* Serve dynamic content */
@@ -179,19 +182,20 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
   }
 }
 
-void serve_static(int fd, char *filename, int filesize)
+void send_headers(int fd, char *filename, int filesize)
 {
   char filetype[MAXLINE], buf[MAXBUF];
 
-  /* Send response headers to client */
   get_filetype(filename, filetype);
   sprintf(buf, "HTTP/1.0 200 OK\r\n");
   sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
   sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
   sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
   Rio_writen(fd, buf, strlen(buf));
+}
 
-  /* Send response body to client */
+void send_response_body(int fd, char *filename, int filesize)
+{
   int srcfd = Open(filename, O_RDONLY, 0);
   char *srcp = Malloc(filesize);
   ssize_t read_size = Rio_readn(srcfd, srcp, filesize);
@@ -200,6 +204,15 @@ void serve_static(int fd, char *filename, int filesize)
   Close(srcfd);
   Rio_writen(fd, srcp, filesize);
   Free(srcp);
+}
+
+void serve_static(char *method, int fd, char *filename, int filesize)
+{
+  send_headers(fd, filename, filesize);
+  if (strcasecmp(method, GET_METHOD) == 0)
+  {
+    send_response_body(fd, filename, filesize);
+  }
 }
 
 /*
