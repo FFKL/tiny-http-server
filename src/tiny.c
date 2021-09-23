@@ -8,6 +8,7 @@
 #include "../lib/process.h"
 #include "../lib/memory.h"
 #include "../lib/socket.h"
+#include "../lib/err.h"
 
 #include <string.h>
 #include <fcntl.h>
@@ -17,9 +18,11 @@
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
+#include <sys/wait.h>
 
 #define MAXLINE 8192 /* max text line length */
 #define MAXBUF 8192  /* max I/O buffer size */
+#define MAXFILETYPE 100
 
 #define GET_METHOD "GET"
 #define HEAD_METHOD "HEAD"
@@ -64,7 +67,7 @@ int main(int argc, char **argv)
   while (1)
   {
     clientlen = sizeof(clientaddr);
-    connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
+    connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *)&clientlen);
     doit(connfd);
     Close(connfd);
   }
@@ -124,11 +127,14 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
   char buf[MAXLINE], body[MAXBUF];
 
   /* Build the HTTP response body */
-  sprintf(body, "<html><title>Tiny Error</title>");
-  sprintf(body, "%s<body bgcolor=\"ffffff\">\r\n", body);
-  sprintf(body, "%s%s: %s\r\n", body, errnum, shortmsg);
-  sprintf(body, "%s<p>%s: %s\r\n", body, longmsg, cause);
-  sprintf(body, "%s<hr><em>The Tiny Web server</em>\r\n", body);
+  body[0] = '\0';
+  strcat(body, "<html><title>Tiny Error</title>");
+  strcat(body, "<body bgcolor=\"ffffff\">\r\n");
+  sprintf(buf, "%s: %s\r\n", errnum, shortmsg);
+  strcat(body, buf);
+  sprintf(buf, "<p>%s: %s\r\n", longmsg, cause);
+  strcat(body, buf);
+  strcat(body, "<hr><em>The Tiny Web server</em>\r\n");
 
   /* Print the HTTP response */
   sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
@@ -184,14 +190,17 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
 
 void send_headers(int fd, char *filename, int filesize)
 {
-  char filetype[MAXLINE], buf[MAXBUF];
+  char filetype[MAXFILETYPE], buf[MAXBUF], headers[MAXBUF];
 
   get_filetype(filename, filetype);
-  sprintf(buf, "HTTP/1.0 200 OK\r\n");
-  sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
-  sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
-  sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
-  Rio_writen(fd, buf, strlen(buf));
+  headers[0] = '\0';
+  strcat(headers, "HTTP/1.0 200 OK\r\n");
+  strcat(headers, "Server: Tiny Web Server\r\n");
+  sprintf(buf, "Content-length: %d\r\n", filesize);
+  strcat(headers, buf);
+  sprintf(buf, "Content-type: %s\r\n\r\n", filetype);
+  strcat(headers, buf);
+  Rio_writen(fd, headers, strlen(headers));
 }
 
 void send_response_body(int fd, char *filename, int filesize)
