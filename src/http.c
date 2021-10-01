@@ -1,11 +1,14 @@
 #include "http.h"
+#include "../lib/memory.h"
 
 #include <string.h>
 #include <setjmp.h>
+#include <unistd.h>
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #define SPACE " "
 #define HTTP_PREFIX "HTTP/"
+#define HEADERS_MEM_SIZE 4096
 
 char *http_methods[] = {"GET", "HEAD", "POST"};
 char *http_versions[] = {"1.0", "1.1"};
@@ -15,11 +18,18 @@ jmp_buf jmp_env;
 static int uri(char **cursor, char *uri_out);
 static int token(char **cursor, char *sample, char *out);
 static int one_of_token(char **cursor, char *sample[], size_t size, char *out);
+static int parsing_exception();
 
-static int parsing_exception()
+int http_message_init(http_message *msg)
 {
-  longjmp(jmp_env, -1);
-  return -1;
+  msg->headers_mem = Malloc(HEADERS_MEM_SIZE); 
+  return 0;
+}
+
+int http_message_free(http_message *msg)
+{
+  Free(msg->headers_mem);
+  return 0;
 }
 
 int parse_http_message(char *text, http_message *msg_out)
@@ -86,4 +96,10 @@ static int one_of_token(char **cursor, char *sample[], size_t size, char *out)
       return 0;
   }
   return parsing_exception();
+}
+
+static int parsing_exception()
+{
+  longjmp(jmp_env, -1);
+  return -1;
 }
