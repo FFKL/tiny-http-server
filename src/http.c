@@ -76,6 +76,20 @@ int parse_http_message(char *text, http_message *msg_out)
     return -1;
 }
 
+http_header *http_get_header(http_message *msg, char *name)
+{
+  http_header *next_head = &msg->headers[0];
+  while (next_head->name != NULL)
+  {
+    if (strcasecmp(name, next_head->name) == 0)
+    {
+      return next_head;
+    }
+    next_head++;
+  }
+  return NULL;
+}
+
 static int uri(char **cursor, char *uri_out)
 {
   char buf[URI_SIZE];

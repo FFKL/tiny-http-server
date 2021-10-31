@@ -26,5 +26,6 @@ typedef struct http_message
 int parse_http_message(char *text, http_message *msg_out);
 int http_message_init(http_message *msg);
 int http_message_free(http_message *msg);
+http_header *http_get_header(http_message *msg, char *name);
 
 #endif
