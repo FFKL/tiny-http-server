@@ -10,6 +10,7 @@
 #define CRLF "\r\n"
 #define HTTP_PREFIX "HTTP/"
 #define HEADERS_MEM_SIZE 4096
+#define BODY_MEM_SIZE 4096
 
 char *http_methods[] = {"GET", "HEAD", "POST"};
 char *http_versions[] = {"1.0", "1.1"};
@@ -32,9 +33,12 @@ static int _token(char **cursor, char *sample, char *out);
 static int one_of_token(char **cursor, char *sample[], size_t size, char *out);
 static int parsing_exception();
 
+// TODO: check memory boundaries after confirming the module interface.
+// Now memory buffers can be exceeded.
 int http_message_init(http_message *msg)
 {
   msg->headers_mem = Malloc(HEADERS_MEM_SIZE);
+  msg->body = Malloc(BODY_MEM_SIZE);
   return 0;
 }
 
@@ -70,6 +74,24 @@ int parse_http_message(char *text, http_message *msg_out)
       header(&parser_mem, &msg_out->headers[header_idx]);
       header_idx++;
     }
+
+    if (strcmp("POST", msg_out->method) == 0)
+    {
+      http_header *header = http_get_header(msg_out, "Content-Length");
+      if (header != NULL)
+      {
+        int content_length = atoi(header->value);
+        if (content_length <= BODY_MEM_SIZE)
+        {
+          strncpy(msg_out->body, parser_mem.text_cursor, content_length);
+        }
+        else
+          return -1;
+      }
+      else
+        return -2;
+    }
+
     return 0;
   }
   else
@@ -78,7 +100,7 @@ int parse_http_message(char *text, http_message *msg_out)
 
 http_header *http_get_header(http_message *msg, char *name)
 {
-  http_header *next_head = &msg->headers[0];
+  http_header *next_head = msg->headers;
   while (next_head->name != NULL)
   {
     if (strcasecmp(name, next_head->name) == 0)

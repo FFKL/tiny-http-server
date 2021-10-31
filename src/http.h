@@ -21,6 +21,7 @@ typedef struct http_message
   char version[VERSION_SIZE];
   http_header headers[HEADERS_SIZE];
   char *headers_mem;
+  char *body;
 } http_message;
 
 int parse_http_message(char *text, http_message *msg_out);
