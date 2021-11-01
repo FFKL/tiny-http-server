@@ -9,6 +9,7 @@
 #include "../lib/memory.h"
 #include "../lib/socket.h"
 #include "../lib/err.h"
+#include "./http.h"
 
 #include <string.h>
 #include <fcntl.h>
@@ -26,15 +27,15 @@
 
 #define GET_METHOD "GET"
 #define HEAD_METHOD "HEAD"
+#define POST_METHOD "POST"
 
 extern char **environ; /* defined by libc */
 
 void doit(int fd);
-void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
 void serve_static(char *method, int fd, char *filename, int filesize);
 void get_filetype(char *filename, char *filetype);
-void serve_dynamic(int fd, char *filename, char *cgiargs, char *method);
+void serve_dynamic(int fd, char *filename, char *cgiargs, http_message *msg);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 
 void reapChildProcesses(int sig)
@@ -77,24 +78,28 @@ void doit(int fd)
 {
   int is_static;
   struct stat sbuf;
-  char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
+  char buf[MAXLINE];
   char filename[MAXLINE], cgiargs[MAXLINE];
   rio_t rio;
 
   /* Read request line and headers */
   Rio_readinitb(&rio, fd);
   Rio_readlineb(&rio, buf, MAXLINE);
-  sscanf(buf, "%s %s %s", method, uri, version);
 
-  if (strcasecmp(method, GET_METHOD) && strcasecmp(method, HEAD_METHOD))
+  http_message msg;
+  http_message_init(&msg);
+  // TODO: handle parse code
+  parse_http_message(rio.rio_buf, &msg);
+  printf("%s %s %s\n", msg.method, msg.version, msg.uri);
+
+  if (strcasecmp(msg.method, GET_METHOD) && strcasecmp(msg.method, HEAD_METHOD) && strcasecmp(msg.method, POST_METHOD))
   {
-    clienterror(fd, method, "501", "Not Implemented", "Tiny does not implement this method");
+    clienterror(fd, msg.method, "501", "Not Implemented", "Tiny does not implement this method");
     return;
   }
-  read_requesthdrs(&rio);
 
   /* Parse URI from GET request */
-  is_static = parse_uri(uri, filename, cgiargs);
+  is_static = parse_uri(msg.uri, filename, cgiargs);
   if (stat(filename, &sbuf) < 0)
   {
     clienterror(fd, filename, "404", "Not found", "Tiny couldn’t find this file");
@@ -108,7 +113,7 @@ void doit(int fd)
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn’t read the file");
       return;
     }
-    serve_static(method, fd, filename, sbuf.st_size);
+    serve_static(msg.method, fd, filename, sbuf.st_size);
   }
   else
   { /* Serve dynamic content */
@@ -118,8 +123,9 @@ void doit(int fd)
                   "Tiny couldn’t run the CGI program");
       return;
     }
-    serve_dynamic(fd, filename, cgiargs, method);
+    serve_dynamic(fd, filename, cgiargs, &msg);
   }
+  http_message_free(&msg);
 }
 
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg)
@@ -144,19 +150,6 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
   sprintf(buf, "Content-length: %d\r\n\r\n", (int)strlen(body));
   Rio_writen(fd, buf, strlen(buf));
   Rio_writen(fd, body, strlen(body));
-}
-
-void read_requesthdrs(rio_t *rp)
-{
-  char buf[MAXLINE];
-
-  Rio_readlineb(rp, buf, MAXLINE);
-  while (strcmp(buf, "\r\n"))
-  {
-    Rio_readlineb(rp, buf, MAXLINE);
-    printf("%s", buf);
-  }
-  return;
 }
 
 int parse_uri(char *uri, char *filename, char *cgiargs)
@@ -241,7 +234,7 @@ void get_filetype(char *filename, char *filetype)
     strcpy(filetype, "text/plain");
 }
 
-void serve_dynamic(int fd, char *filename, char *cgiargs, char *method)
+void serve_dynamic(int fd, char *filename, char *cgiargs, http_message *msg)
 {
   char buf[MAXLINE], *emptylist[] = {NULL};
 
@@ -251,13 +244,23 @@ void serve_dynamic(int fd, char *filename, char *cgiargs, char *method)
   sprintf(buf, "Server: Tiny Web Server\r\n");
   Rio_writen(fd, buf, strlen(buf));
 
+  int pipe_fd[2];
+  pipe(pipe_fd);
+
   if (Fork() == 0)
   { /* child */
     /* Real server would set all CGI vars here */
     setenv("QUERY_STRING", cgiargs, 1);
-    setenv("HTTP_METHOD", method, 1);
-    Dup2(fd, STDOUT_FILENO);
-    /* Redirect stdout to client */
+    setenv("HTTP_METHOD", msg->method, 1);
+    Dup2(fd, STDOUT_FILENO); /* Redirect stdout to client */
+    Close(pipe_fd[1]);
+    Dup2(pipe_fd[0], STDIN_FILENO);
     Execve(filename, emptylist, environ); /* Run CGI program */
+  }
+  else
+  {
+    Close(pipe_fd[0]);
+    Write(pipe_fd[1], msg->body, strlen(msg->body));
+    Close(pipe_fd[1]);
   }
 }
