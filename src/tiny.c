@@ -59,7 +59,10 @@ int main(int argc, char **argv)
   }
   port = atoi(argv[1]);
 
-  if (signal(SIGCHLD, reap_child_process) == SIG_ERR)
+  struct sigaction act = {
+      .sa_flags = SA_RESTART,
+      .sa_handler = reap_child_process};
+  if (sigaction(SIGCHLD, &act, NULL) != 0)
   {
     unix_error("SIGCHILD error");
   }
