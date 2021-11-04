@@ -38,7 +38,7 @@ void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs, http_message *msg);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 
-void reapChildProcesses(int sig)
+void reap_child_process(int sig)
 {
   pid_t pid;
   while ((pid = wait(NULL)) > 0)
@@ -59,7 +59,7 @@ int main(int argc, char **argv)
   }
   port = atoi(argv[1]);
 
-  if (signal(SIGCHLD, reapChildProcesses) == SIG_ERR)
+  if (signal(SIGCHLD, reap_child_process) == SIG_ERR)
   {
     unix_error("SIGCHILD error");
   }
