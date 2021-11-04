@@ -59,12 +59,20 @@ int main(int argc, char **argv)
   }
   port = atoi(argv[1]);
 
-  struct sigaction act = {
+  struct sigaction sigchld_act = {
       .sa_flags = SA_RESTART,
       .sa_handler = reap_child_process};
-  if (sigaction(SIGCHLD, &act, NULL) != 0)
+  if (sigaction(SIGCHLD, &sigchld_act, NULL) != 0)
   {
-    unix_error("SIGCHILD error");
+    unix_error("SIGCHLD error");
+  }
+
+  struct sigaction sigpipe_act = {
+      .sa_flags = SA_RESTART,
+      .sa_handler = SIG_IGN};
+  if (sigaction(SIGPIPE, &sigpipe_act, NULL) != 0)
+  {
+    unix_error("SIGPIPE error");
   }
 
   listenfd = Open_listenfd(port);
