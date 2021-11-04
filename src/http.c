@@ -128,6 +128,7 @@ static int uri(char **cursor, char *uri_out)
 
   (*cursor) += i;
   strncpy(uri_out, buf, i);
+  uri_out[i] = '\0';
   return 0;
 }
 
