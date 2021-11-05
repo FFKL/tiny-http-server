@@ -81,6 +81,7 @@ int main(int argc, char **argv)
     clientlen = sizeof(clientaddr);
     connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *)&clientlen);
     doit(connfd);
+    shutdown(STDOUT_FILENO, SHUT_RDWR);
     Close(connfd);
   }
 }
