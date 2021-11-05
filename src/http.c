@@ -45,6 +45,7 @@ int http_message_init(http_message *msg)
 int http_message_free(http_message *msg)
 {
   Free(msg->headers_mem);
+  Free(msg->body);
   return 0;
 }
 
