@@ -76,7 +76,5 @@ int main(void)
   }
 
   fflush(stdout);
-  shutdown(STDOUT_FILENO, SHUT_WR);
-  close(STDOUT_FILENO);
   exit(0);
 }
