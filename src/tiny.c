@@ -107,7 +107,7 @@ void doit(int fd)
   if (strcasecmp(msg.method, GET_METHOD) && strcasecmp(msg.method, HEAD_METHOD) && strcasecmp(msg.method, POST_METHOD))
   {
     clienterror(fd, msg.method, "501", "Not Implemented", "Tiny does not implement this method");
-    return;
+    goto end;
   }
 
   /* Parse URI from GET request */
@@ -115,7 +115,7 @@ void doit(int fd)
   if (stat(filename, &sbuf) < 0)
   {
     clienterror(fd, filename, "404", "Not found", "Tiny couldn’t find this file");
-    return;
+    goto end;
   }
 
   if (is_static)
@@ -123,7 +123,7 @@ void doit(int fd)
     if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode))
     {
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn’t read the file");
-      return;
+      goto end;
     }
     serve_static(msg.method, fd, filename, sbuf.st_size);
   }
@@ -133,10 +133,12 @@ void doit(int fd)
     {
       clienterror(fd, filename, "403", "Forbidden",
                   "Tiny couldn’t run the CGI program");
-      return;
+      goto end;
     }
     serve_dynamic(fd, filename, cgiargs, &msg);
   }
+
+end:
   http_message_free(&msg);
 }
 
