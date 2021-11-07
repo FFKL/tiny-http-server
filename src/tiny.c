@@ -80,8 +80,13 @@ int main(int argc, char **argv)
   {
     clientlen = sizeof(clientaddr);
     connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *)&clientlen);
-    doit(connfd);
-    shutdown(STDOUT_FILENO, SHUT_RDWR);
+    if (Fork() == 0)
+    {
+      Close(listenfd);
+      doit(connfd);
+      Close(connfd);
+      exit(0);
+    }
     Close(connfd);
   }
 }
