@@ -59,6 +59,14 @@ int Select(int n, fd_set *readfds, fd_set *writefds,
   return rc;
 }
 
+int Dup(int oldfd)
+{
+  int rc;
+  if ((rc = dup(oldfd)) < 0)
+    unix_error("Dup error");
+  return rc;
+}
+
 int Dup2(int fd1, int fd2)
 {
   int rc;

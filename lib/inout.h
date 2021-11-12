@@ -13,6 +13,7 @@ ssize_t Write(int fd, const void *buf, size_t count);
 off_t Lseek(int fildes, off_t offset, int whence);
 void Close(int fd);
 int Select(int n, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
+int Dup(int oldfd);
 int Dup2(int fd1, int fd2);
 void Stat(const char *filename, struct stat *buf);
 void Fstat(int fd, struct stat *buf);
