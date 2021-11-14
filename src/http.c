@@ -1,9 +1,12 @@
 #include "http.h"
+#include "../lib/inout.h"
 #include "../lib/memory.h"
+#include "../lib/err.h"
 
 #include <string.h>
 #include <setjmp.h>
 #include <unistd.h>
+#include <errno.h>
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #define SPACE " "
@@ -220,4 +223,78 @@ static int parsing_exception()
 {
   longjmp(jmp_env, -1);
   return -1;
+}
+
+ssize_t http_text_init(int fd, http_text *text)
+{
+  text->fd = Dup(fd);
+  text->unread = 0;
+  text->filled = 0;
+  int flags = fcntl(text->fd, F_GETFL);
+  if (flags < 0)
+    unix_error("Fcntl error");
+
+  int res = fcntl(text->fd, F_SETFL, flags | O_NONBLOCK);
+  if (res < 0)
+    unix_error("Fcntl error");
+
+  text->buf = Malloc(HEADERS_MEM_SIZE);
+  text->bufptr = text->buf;
+  return 0;
+}
+
+ssize_t http_text_free(http_text *text)
+{
+  Close(text->fd);
+  Free(text->buf);
+  return 0;
+}
+
+static ssize_t find_line(char *buf, size_t size)
+{
+  for (int i = 0; i < size; i++)
+  {
+    if (buf[i] == '\r' && ((i + 1) < size) && buf[i + 1] == '\n')
+      return i + 2;
+  }
+  return 0;
+}
+
+ssize_t next_head_line(http_text *text, char *buf, size_t size)
+{
+  ssize_t n;
+  ssize_t line_size;
+  while (text->filled != HEADERS_MEM_SIZE)
+  {
+    line_size = find_line(text->bufptr, text->unread);
+    if (line_size > size)
+      return TOO_LONG_HEADER;
+    if (line_size > 0)
+    {
+      strncpy(buf, text->bufptr, line_size);
+      text->unread -= line_size;
+      text->bufptr += line_size;
+      return line_size;
+    }
+    n = read(text->fd, text->bufptr + text->unread, HEADERS_MEM_SIZE - text->filled);
+    if (n < 0)
+    {
+      if (errno == EINTR)
+        continue;
+      if (errno == EAGAIN)
+        return NO_DATA;
+      return -1;
+    }
+    else if (n == 0)
+    {
+      return TEXT_END;
+    }
+    else
+    {
+
+      text->filled += n;
+      text->unread += n;
+    }
+  }
+  return TOO_LONG_HEADERS;
 }

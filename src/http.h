@@ -8,6 +8,11 @@
 #define VERSION_SIZE 4
 #define HEADERS_SIZE 40
 
+#define TEXT_END -2
+#define NO_DATA -3
+#define TOO_LONG_HEADERS -4
+#define TOO_LONG_HEADER -5
+
 typedef struct http_header
 {
   char *name;
@@ -23,6 +28,19 @@ typedef struct http_message
   char *headers_mem;
   char *body;
 } http_message;
+
+typedef struct http_text
+{
+  int fd;
+  int unread;
+  int filled;
+  char *bufptr;
+  char *buf;
+} http_text;
+
+ssize_t http_text_init(int fd, http_text *text);
+ssize_t http_text_free(http_text *text);
+ssize_t next_head_line(http_text *text, char *buf, size_t size);
 
 int parse_http_message(char *text, http_message *msg_out);
 int http_message_init(http_message *msg);
