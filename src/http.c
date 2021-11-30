@@ -298,3 +298,34 @@ ssize_t next_head_line(http_text *text, char *buf, size_t size)
   }
   return TOO_LONG_HEADERS;
 }
+
+ssize_t http_consume(http_text *text)
+{
+  ssize_t n;
+  ssize_t line_size;
+  while (text->filled != HEADERS_MEM_SIZE)
+  {
+    line_size = find_line(text->bufptr, text->unread);
+    if (line_size == 2 && (strncmp(text->bufptr, CRLF, line_size) == 0))
+      return CRLF_HAPPENED;
+    n = read(text->fd, text->bufptr + text->unread, HEADERS_MEM_SIZE - text->filled);
+    if (n < 0)
+    {
+      if (errno == EINTR)
+        continue;
+      if (errno == EAGAIN)
+        return NO_DATA;
+      return -1;
+    }
+    else if (n == 0)
+    {
+      return TEXT_END;
+    }
+    else
+    {
+      text->filled += n;
+      text->unread += n;
+    }
+  }
+  return TOO_LONG_HEADERS;
+}
