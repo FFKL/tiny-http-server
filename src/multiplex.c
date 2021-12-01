@@ -1,11 +1,10 @@
 #include "../lib/err.h"
 #include "../lib/inout.h"
+#include "../lib/rio.h"
 
 #include "multiplex.h"
 
 #define MAXLINE 8192
-
-int byte_cnt = 0; /* Counts total bytes received by server */
 
 void mult_init_pool(int listenfd, mult_pool *p)
 {
@@ -28,15 +27,15 @@ void mult_add_client(int connfd, mult_pool *p)
     if (p->clientfd[i] < 0)
     {
       /* Add connected descriptor to the pool */
-      p->clientfd[i] = connfd;
-      Rio_readinitb(&p->clientrio[i], connfd);
+      http_text_init(connfd, &p->client_read[i]);
+      p->clientfd[i] = p->client_read[i].fd;
 
       /* Add the descriptor to descriptor set */
-      FD_SET(connfd, &p->read_set);
+      FD_SET(p->clientfd[i], &p->read_set);
 
       /* Update max descriptor and pool highwater mark */
-      if (connfd > p->maxfd)
-        p->maxfd = connfd;
+      if (p->clientfd[i] > p->maxfd)
+        p->maxfd = p->clientfd[i];
       if (i > p->maxi)
         p->maxi = i;
       break;
@@ -45,30 +44,33 @@ void mult_add_client(int connfd, mult_pool *p)
     app_error("add_client error: Too many clients");
 }
 
-void mult_check_clients(mult_pool *p)
+void mult_check_clients(mult_pool *p, int (*handler)(http_text *))
 {
   int connfd, n;
-  char buf[MAXLINE];
-  rio_t rio;
+  http_text *rio;
 
   for (int i = 0; (i <= p->maxi) && (p->nready > 0); i++)
   {
     connfd = p->clientfd[i];
-    rio = p->clientrio[i];
+    rio = &p->client_read[i];
 
     /* If the descriptor is ready, echo a text line from it */
     if ((connfd > 0) && (FD_ISSET(connfd, &p->ready_set)))
     {
       p->nready--;
-      if ((n = Rio_readlineb(&rio, buf, MAXLINE)) != 0)
+      if ((n = http_consume(rio)) == CRLF_HAPPENED)
       {
-        byte_cnt += n;
-        printf("Server received %d (%d total) bytes on fd %d\n", n, byte_cnt, connfd);
-        Rio_writen(connfd, buf, n);
+        int res = handler(rio);
+        if (res == -1)
+        {
+          http_text_free(rio);
+          FD_CLR(connfd, &p->read_set);
+          p->clientfd[i] = -1;
+        }
       }
-      else /* EOF detected, remove descriptor from pool */
+      else if (n == TEXT_END) /* EOF detected, remove descriptor from pool */
       {
-        Close(connfd);
+        http_text_free(rio);
         FD_CLR(connfd, &p->read_set);
         p->clientfd[i] = -1;
       }

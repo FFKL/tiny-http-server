@@ -1,7 +1,7 @@
 #ifndef MULTIPLEX_H
 #define MULTIPLEX_H
 
-#include "../lib/rio.h"
+#include "http.h"
 
 #include <sys/select.h>
 
@@ -13,11 +13,11 @@ typedef struct mult_pool /* Represents a pool of connected descriptors */
   int nready;                  /* Number of ready descriptors from select */
   int maxi;                    /* Highwater index into client array */
   int clientfd[FD_SETSIZE];    /* Set of active descriptors */
-  rio_t clientrio[FD_SETSIZE]; /* Set of active read buffers */
+  http_text client_read[FD_SETSIZE]; /* Set of active read buffers */
 } mult_pool;
 
 void mult_init_pool(int listenfd, mult_pool *p);
 void mult_add_client(int connfd, mult_pool *p);
-void mult_check_clients(mult_pool *p);
+void mult_check_clients(mult_pool *p, int (*handler)(http_text *));
 
 #endif

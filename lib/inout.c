@@ -1,6 +1,8 @@
 #include "inout.h"
 #include "err.h"
 
+#include <errno.h>
+
 /********************************
  * Wrappers for Unix I/O routines
  ********************************/
@@ -54,7 +56,7 @@ int Select(int n, fd_set *readfds, fd_set *writefds,
 {
   int rc;
 
-  if ((rc = select(n, readfds, writefds, exceptfds, timeout)) < 0)
+  if ((rc = select(n, readfds, writefds, exceptfds, timeout)) < 0 && errno != EINTR)
     unix_error("Select error");
   return rc;
 }

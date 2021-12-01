@@ -9,7 +9,10 @@
 #include "../lib/memory.h"
 #include "../lib/socket.h"
 #include "../lib/err.h"
+#include "../lib/signal.h"
+
 #include "./http.h"
+#include "./multiplex.h"
 
 #include <string.h>
 #include <fcntl.h>
@@ -31,7 +34,7 @@
 
 extern char **environ; /* defined by libc */
 
-void doit(int fd);
+int doit(http_text *text);
 int parse_uri(char *uri, char *filename, char *cgiargs);
 void serve_static(char *method, int fd, char *filename, int filesize);
 void get_filetype(char *filename, char *filetype);
@@ -51,6 +54,7 @@ int main(int argc, char **argv)
 {
   int listenfd, connfd, port, clientlen;
   struct sockaddr_in clientaddr;
+  static mult_pool pool; // TODO: allocated memory exceeds the standard stack size (8192 Kb). Use dynamic allocation?
 
   if (argc != 2)
   {
@@ -59,54 +63,47 @@ int main(int argc, char **argv)
   }
   port = atoi(argv[1]);
 
-  struct sigaction sigchld_act = {
-      .sa_flags = SA_RESTART,
-      .sa_handler = reap_child_process};
-  if (sigaction(SIGCHLD, &sigchld_act, NULL) != 0)
-  {
-    unix_error("SIGCHLD error");
-  }
-
-  struct sigaction sigpipe_act = {
-      .sa_flags = SA_RESTART,
-      .sa_handler = SIG_IGN};
-  if (sigaction(SIGPIPE, &sigpipe_act, NULL) != 0)
-  {
-    unix_error("SIGPIPE error");
-  }
+  Signal(SIGCHLD, reap_child_process);
+  Signal(SIGPIPE, SIG_IGN);
 
   listenfd = Open_listenfd(port);
+  mult_init_pool(listenfd, &pool);
+  /**
+   * Main Flow:
+   * 1. Add to multiplexer
+   * 2. Read each line to CRLF
+   * 3. Pass http_text
+   * 4. Use same logic
+  */
   while (1)
   {
-    clientlen = sizeof(clientaddr);
-    connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *)&clientlen);
-    if (Fork() == 0)
+    do
     {
-      Close(listenfd);
-      doit(connfd);
+      pool.ready_set = pool.read_set;
+      pool.nready = Select(pool.maxfd + 1, &pool.ready_set, NULL, NULL, NULL);
+    } while (pool.nready == -1 && errno == EINTR);
+
+    if (FD_ISSET(listenfd, &pool.ready_set))
+    {
+      connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *)&clientlen);
+      mult_add_client(connfd, &pool);
       Close(connfd);
-      exit(0);
     }
-    Close(connfd);
+    mult_check_clients(&pool, doit);
   }
 }
 
-void doit(int fd)
+int doit(http_text *text)
 {
   int is_static;
   struct stat sbuf;
-  char buf[MAXLINE];
   char filename[MAXLINE], cgiargs[MAXLINE];
-  rio_t rio;
-
-  /* Read request line and headers */
-  Rio_readinitb(&rio, fd);
-  Rio_readlineb(&rio, buf, MAXLINE);
+  int fd = text->fd;
 
   http_message msg;
   http_message_init(&msg);
   // TODO: handle parse code
-  parse_http_message(rio.rio_buf, &msg);
+  parse_http_message(text->buf, &msg);
   printf("%s %s %s\n", msg.method, msg.version, msg.uri);
 
   if (strcasecmp(msg.method, GET_METHOD) && strcasecmp(msg.method, HEAD_METHOD) && strcasecmp(msg.method, POST_METHOD))
@@ -145,6 +142,7 @@ void doit(int fd)
 
 end:
   http_message_free(&msg);
+  return -1;
 }
 
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg)

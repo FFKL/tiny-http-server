@@ -291,7 +291,6 @@ ssize_t next_head_line(http_text *text, char *buf, size_t size)
     }
     else
     {
-
       text->filled += n;
       text->unread += n;
     }
@@ -305,9 +304,17 @@ ssize_t http_consume(http_text *text)
   ssize_t line_size;
   while (text->filled != HEADERS_MEM_SIZE)
   {
-    line_size = find_line(text->bufptr, text->unread);
-    if (line_size == 2 && (strncmp(text->bufptr, CRLF, line_size) == 0))
-      return CRLF_HAPPENED;
+    do
+    {
+      line_size = find_line(text->bufptr, text->unread);
+      text->unread -= line_size;
+      text->bufptr += line_size;
+      if (line_size == 2 && (strncmp(text->bufptr - line_size, CRLF, line_size) == 0))
+      {
+        return CRLF_HAPPENED;
+      }
+    } while (line_size > 0);
+
     n = read(text->fd, text->bufptr + text->unread, HEADERS_MEM_SIZE - text->filled);
     if (n < 0)
     {
