@@ -10,6 +10,8 @@
 #include "../lib/socket.h"
 #include "../lib/err.h"
 #include "../lib/signal.h"
+#include "../lib/sbuf.h"
+#include "../lib/concurrency.h"
 
 #include "./http.h"
 #include "./multiplex.h"
@@ -27,6 +29,8 @@
 #define MAXLINE 8192 /* max text line length */
 #define MAXBUF 8192  /* max I/O buffer size */
 #define MAXFILETYPE 100
+#define NTHREADS 4
+#define SBUFSIZE 16
 
 #define GET_METHOD "GET"
 #define HEAD_METHOD "HEAD"
@@ -34,6 +38,9 @@
 
 extern char **environ; /* defined by libc */
 
+sbuf_t sbuf; /* Shared bounded buffer of connected descriptors */
+
+void *thread(void *vargp);
 int doit(http_text *text);
 int parse_uri(char *uri, char *filename, char *cgiargs);
 void serve_static(char *method, int fd, char *filename, int filesize);
@@ -54,7 +61,6 @@ int main(int argc, char **argv)
 {
   int listenfd, connfd, port, clientlen;
   struct sockaddr_in clientaddr;
-  static mult_pool pool; // TODO: allocated memory exceeds the standard stack size (8192 Kb). Use dynamic allocation?
 
   if (argc != 2)
   {
@@ -66,30 +72,59 @@ int main(int argc, char **argv)
   Signal(SIGCHLD, reap_child_process);
   Signal(SIGPIPE, SIG_IGN);
 
+  sbuf_init(&sbuf, SBUFSIZE);
+
+  pthread_t tid;
+  for (int i = 0; i < NTHREADS; i++)
+    Pthread_create(&tid, NULL, thread, NULL);
+
   listenfd = Open_listenfd(port);
-  mult_init_pool(listenfd, &pool);
-  /**
-   * Main Flow:
-   * 1. Add to multiplexer
-   * 2. Read each line to CRLF
-   * 3. Pass http_text
-   * 4. Use same logic
-  */
   while (1)
   {
+    connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *)&clientlen);
+    sbuf_insert(&sbuf, connfd);
+  }
+}
+
+void *thread(void *vargp)
+{
+  Pthread_detach(pthread_self());
+
+  while (1)
+  {
+    int fd = sbuf_remove(&sbuf);
+    http_text text;
+    fd_set read_set;
+
+    http_text_init(fd, &text);
+    Close(fd);
+    FD_ZERO(&read_set);
+    FD_SET(text.fd, &read_set);
+
     do
     {
-      pool.ready_set = pool.read_set;
-      pool.nready = Select(pool.maxfd + 1, &pool.ready_set, NULL, NULL, NULL);
-    } while (pool.nready == -1 && errno == EINTR);
+      fd_set ready_set = read_set;
+      int nready = Select(text.fd + 1, &ready_set, NULL, NULL, NULL);
 
-    if (FD_ISSET(listenfd, &pool.ready_set))
-    {
-      connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *)&clientlen);
-      mult_add_client(connfd, &pool);
-      Close(connfd);
-    }
-    mult_check_clients(&pool, doit);
+      if (nready == -1 && errno == EINTR)
+        continue;
+      if (FD_ISSET(text.fd, &ready_set))
+      {
+        ssize_t res = http_consume(&text);
+        if (res == CRLF_HAPPENED)
+        {
+          doit(&text);
+          break;
+        }
+        else if (res == TEXT_END)
+          break;
+      }
+      else
+        break;
+    } while (1);
+
+    FD_CLR(text.fd, &read_set);
+    http_text_free(&text);
   }
 }
 
