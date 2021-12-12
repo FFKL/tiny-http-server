@@ -91,6 +91,45 @@ void Pthread_mutex_trylock(pthread_mutex_t *mutex)
     posix_error(rc, "Pthread_mutex_trylock error");
 }
 
+/************************************************
+ * Wrappers for Pthread_cond fuctions
+ ************************************************/
+
+void Pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr)
+{
+  int rc = pthread_cond_init(cond, attr);
+  if (rc != 0)
+    posix_error(rc, "Pthread_cond_init error");
+}
+
+void Pthread_cond_destroy(pthread_cond_t *cond)
+{
+  int rc = pthread_cond_destroy(cond);
+  if (rc != 0)
+    posix_error(rc, "Pthread_cond_destroy error");
+}
+
+void Pthread_cond_signal(pthread_cond_t *cond)
+{
+  int rc = pthread_cond_signal(cond);
+  if (rc != 0)
+    posix_error(rc, "Pthread_cond_signal error");
+}
+
+void Pthread_cond_broadcast(pthread_cond_t *cond)
+{
+  int rc = pthread_cond_broadcast(cond);
+  if (rc != 0)
+    posix_error(rc, "Pthread_cond_broadcast error");
+}
+
+void Pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
+{
+  int rc = pthread_cond_wait(cond, mutex);
+  if (rc != 0)
+    posix_error(rc, "Pthread_cond_wait error");
+}
+
 /*******************************
  * Wrappers for Posix semaphores
  *******************************/

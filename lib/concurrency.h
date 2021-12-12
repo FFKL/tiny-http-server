@@ -18,6 +18,12 @@ void Pthread_mutex_lock(pthread_mutex_t *mutex);
 void Pthread_mutex_unlock(pthread_mutex_t *mutex);
 void Pthread_mutex_trylock(pthread_mutex_t *mutex);
 
+void Pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr);
+void Pthread_cond_destroy(pthread_cond_t *cond);
+void Pthread_cond_signal(pthread_cond_t *cond);
+void Pthread_cond_broadcast(pthread_cond_t *cond);
+void Pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex);
+
 void Sem_init(sem_t *sem, int pshared, unsigned int value);
 void P(sem_t *sem);
 void V(sem_t *sem);
