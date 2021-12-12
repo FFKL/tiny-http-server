@@ -12,6 +12,12 @@ void Pthread_exit(void *retval);
 pthread_t Pthread_self(void);
 void Pthread_once(pthread_once_t *once_control, void (*init_function)());
 
+void Pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
+void Pthread_mutex_destroy(pthread_mutex_t *mutex);
+void Pthread_mutex_lock(pthread_mutex_t *mutex);
+void Pthread_mutex_unlock(pthread_mutex_t *mutex);
+void Pthread_mutex_trylock(pthread_mutex_t *mutex);
+
 void Sem_init(sem_t *sem, int pshared, unsigned int value);
 void P(sem_t *sem);
 void V(sem_t *sem);

@@ -52,6 +52,45 @@ void Pthread_once(pthread_once_t *once_control, void (*init_function)())
   pthread_once(once_control, init_function);
 }
 
+/************************************************
+ * Wrappers for Pthread_mutex fuctions
+ ************************************************/
+
+void Pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr)
+{
+  int rc = pthread_mutex_init(mutex, attr);
+  if (rc != 0)
+    posix_error(rc, "Pthread_mutex_init error");
+}
+
+void Pthread_mutex_destroy(pthread_mutex_t *mutex)
+{
+  int rc = pthread_mutex_destroy(mutex);
+  if (rc != 0)
+    posix_error(rc, "Pthread_mutex_destroy error");
+}
+
+void Pthread_mutex_lock(pthread_mutex_t *mutex)
+{
+  int rc = pthread_mutex_lock(mutex);
+  if (rc != 0)
+    posix_error(rc, "Pthread_mutex_lock error");
+}
+
+void Pthread_mutex_unlock(pthread_mutex_t *mutex)
+{
+  int rc = pthread_mutex_unlock(mutex);
+  if (rc != 0)
+    posix_error(rc, "Pthread_mutex_unlock error");
+}
+
+void Pthread_mutex_trylock(pthread_mutex_t *mutex)
+{
+  int rc = pthread_mutex_trylock(mutex);
+  if (rc != 0)
+    posix_error(rc, "Pthread_mutex_trylock error");
+}
+
 /*******************************
  * Wrappers for Posix semaphores
  *******************************/
