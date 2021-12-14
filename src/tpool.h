@@ -36,4 +36,7 @@ typedef struct tpool
   pthread_cond_t threads_wait;
 } tpool;
 
+void tpool_init(tpool *pool, int threads_count, int queue_size);
+void tpool_free(tpool *pool);
+
 #endif
