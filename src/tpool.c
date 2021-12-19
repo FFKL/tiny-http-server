@@ -36,6 +36,7 @@ static job_queue *job_queue_create(int n)
   queue->buf = Malloc(n * sizeof(job));
   queue->n = n;
   queue->front = queue->rear = 0;
+  return queue;
 }
 
 static void job_queue_destroy(job_queue *queue)
