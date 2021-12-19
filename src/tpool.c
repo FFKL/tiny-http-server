@@ -9,7 +9,8 @@ static job *tpool_pull_job(tpool *pool);
 static job_queue *job_queue_create(int n);
 static void job_queue_destroy(job_queue *queue);
 
-static void thread_init(tpool *pool);
+static void threads_create(tpool *pool, int n);
+static void thread_create(tpool *pool);
 static void *thread_routine(tpool *pool);
 
 void tpool_init(tpool *pool, int threads_count, int queue_size)
@@ -19,6 +20,7 @@ void tpool_init(tpool *pool, int threads_count, int queue_size)
   pool->threads_alive = threads_count;
   pool->threads_necessary = threads_count;
   pool->queue = job_queue_create(queue_size);
+  threads_create(pool, threads_count);
 }
 
 void tpool_free(tpool *pool)
@@ -71,7 +73,13 @@ static job *tpool_pull_job(tpool *pool)
   return job;
 }
 
-static void thread_init(tpool *pool)
+static void threads_create(tpool *pool, int n)
+{
+  for (int i = 0; i < n; i++)
+    thread_create(pool);
+}
+
+static void thread_create(tpool *pool)
 {
   pthread_t tid;
   Pthread_create(&tid, NULL, (void *(*)(void *))thread_routine, pool);
