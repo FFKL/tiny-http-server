@@ -3,10 +3,13 @@
 
 #include <pthread.h>
 
+typedef void (*routine)(void *arg);
+typedef void *routine_arg;
+
 typedef struct job
 {
-  void (*routine)(void *arg);
-  void *arg;
+  routine routine;
+  routine_arg arg;
 } job;
 
 typedef struct binsem
@@ -18,13 +21,11 @@ typedef struct binsem
 
 typedef struct job_queue
 {
-  job **buf;             /* Buffer array */
-  int n;                 /* Maximum number of slots */
-  int front;             /* buf[(front+1)%n] is first item */
-  int rear;              /* buf[rear%n] is last item */
-  pthread_mutex_t mutex; /* Protects accesses to buf */
-  binsem slots;          /* Protects available slots */
-  binsem items;          /* Protects available items */
+  job **buf;
+  int n;
+  int front; /* buf[(front+1)%n] is first item */
+  int rear;  /* buf[rear%n] is last item */
+  int filled;
 } job_queue;
 
 typedef struct tpool
@@ -32,11 +33,13 @@ typedef struct tpool
   job_queue *queue;
   int threads_alive;
   int threads_necessary;
-  pthread_mutex_t threads_count_mutex;
+  pthread_mutex_t lock;
   pthread_cond_t threads_wait;
+  pthread_cond_t producers_wait;
 } tpool;
 
 void tpool_init(tpool *pool, int threads_count, int queue_size);
 void tpool_free(tpool *pool);
+void tpool_push_job(tpool *pool, routine routine, routine_arg arg);
 
 #endif
