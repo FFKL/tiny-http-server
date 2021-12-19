@@ -12,16 +12,6 @@ static void job_queue_destroy(job_queue *queue);
 static void thread_init(tpool *pool);
 static void *thread_routine(tpool *pool);
 
-/**
- * Binsem implementation repeats https://github.com/Pithikos/C-Thread-Pool
-*/
-static void binsem_init(binsem *sem, int value);
-static void binsem_destroy(binsem *sem);
-static void binsem_reset(binsem *sem);
-static void binsem_post(binsem *sem);
-static void binsem_post_all(binsem *sem);
-static void binsem_wait(binsem *sem);
-
 void tpool_init(tpool *pool, int threads_count, int queue_size)
 {
   Pthread_mutex_init(&pool->lock, NULL);
@@ -118,52 +108,4 @@ static void *thread_routine(tpool *pool)
   }
 
   return NULL;
-}
-
-static void binsem_init(binsem *sem, int value)
-{
-  if (value < 0 || value > 1)
-    app_error("binsim can be initialized with 1 or 0");
-
-  Pthread_mutex_init(&sem->mutex, NULL);
-  Pthread_cond_init(&sem->cond, NULL);
-  sem->val = value;
-}
-
-static void binsem_destroy(binsem *sem)
-{
-  Pthread_mutex_destroy(&sem->mutex);
-  Pthread_cond_destroy(&sem->cond);
-}
-
-static void binsem_reset(binsem *sem)
-{
-  binsem_init(sem, 0);
-}
-
-static void binsem_post(binsem *sem)
-{
-  pthread_mutex_lock(&sem->mutex);
-  sem->val = 1;
-  pthread_cond_signal(&sem->cond);
-  pthread_mutex_unlock(&sem->mutex);
-}
-
-static void binsem_post_all(binsem *sem)
-{
-  pthread_mutex_lock(&sem->mutex);
-  sem->val = 1;
-  pthread_cond_broadcast(&sem->cond);
-  pthread_mutex_unlock(&sem->mutex);
-}
-
-static void binsem_wait(binsem *sem)
-{
-  pthread_mutex_lock(&sem->mutex);
-  while (sem->val != 1)
-  {
-    pthread_cond_wait(&sem->cond, &sem->mutex);
-  }
-  sem->val = 0;
-  pthread_mutex_unlock(&sem->mutex);
 }

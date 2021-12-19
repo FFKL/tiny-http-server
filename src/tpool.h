@@ -12,13 +12,6 @@ typedef struct job
   routine_arg arg;
 } job;
 
-typedef struct binsem
-{
-  pthread_mutex_t mutex;
-  pthread_cond_t cond;
-  int val;
-} binsem;
-
 typedef struct job_queue
 {
   job **buf;
