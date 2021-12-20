@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include "../lib/concurrency.h"
 #include "../lib/err.h"
 #include "../lib/memory.h"
@@ -17,10 +19,12 @@ void tpool_init(tpool *pool, int threads_count, int queue_size)
 {
   Pthread_mutex_init(&pool->lock, NULL);
   Pthread_cond_init(&pool->threads_wait, NULL);
-  pool->threads_alive = threads_count;
+  pool->threads_alive = 0;
   pool->threads_necessary = threads_count;
   pool->queue = job_queue_create(queue_size);
+
   threads_create(pool, threads_count);
+  printf("Thread pool initialized with %d queue size and %d threads count\n", queue_size, threads_count);
 }
 
 void tpool_free(tpool *pool)
@@ -36,6 +40,7 @@ static job_queue *job_queue_create(int n)
   queue->buf = Malloc(n * sizeof(job));
   queue->n = n;
   queue->front = queue->rear = 0;
+  queue->filled = 0;
   return queue;
 }
 
@@ -47,6 +52,7 @@ static void job_queue_destroy(job_queue *queue)
 
 void tpool_push_job(tpool *pool, routine routine, routine_arg arg)
 {
+  printf("Thread %ld: Push the job\n", Pthread_self());
   job_queue *queue = pool->queue;
 
   job *new_job = Malloc(sizeof(job));
@@ -62,6 +68,7 @@ void tpool_push_job(tpool *pool, routine routine, routine_arg arg)
   Pthread_cond_signal(&pool->threads_wait); // ⚡
 
   Pthread_mutex_unlock(&pool->lock); // 🔓
+  printf("Thread %ld: Job pushed\n", Pthread_self());
 }
 
 static job *tpool_pull_job(tpool *pool)
@@ -89,15 +96,18 @@ static void thread_create(tpool *pool)
 
 static void *thread_routine(tpool *pool)
 {
+  printf("Thread %ld: Initialization\n", Pthread_self());
+
   Pthread_mutex_lock(&pool->lock); // 🔒
   pool->threads_alive += 1;
   Pthread_mutex_unlock(&pool->lock); // 🔓
 
+  printf("Threads alive %d\n", pool->threads_alive);
+
   while (1)
   {
     Pthread_mutex_lock(&pool->lock); // 🔒
-
-    while ((pool->queue->filled == 0) || (pool->threads_alive <= pool->threads_necessary))
+    while ((pool->queue->filled == 0) && (pool->threads_alive <= pool->threads_necessary))
       Pthread_cond_wait(&pool->threads_wait, &pool->lock); // 💤
 
     if (pool->threads_alive > pool->threads_necessary)
@@ -108,12 +118,14 @@ static void *thread_routine(tpool *pool)
     }
 
     job *job = tpool_pull_job(pool);
+    printf("Thread %ld: Start the job\n", Pthread_self());
     Pthread_cond_signal(&pool->producers_wait); // ⚡
 
     Pthread_mutex_unlock(&pool->lock); // 🔓
 
     job->routine(job->arg);
     Free(job);
+    printf("Thread %ld: Finish the job\n", Pthread_self());
   }
 
   return NULL;
