@@ -10,11 +10,11 @@
 #include "../lib/socket.h"
 #include "../lib/err.h"
 #include "../lib/signal.h"
-#include "../lib/sbuf.h"
 #include "../lib/concurrency.h"
 
 #include "./http.h"
 #include "./multiplex.h"
+#include "./tpool.h"
 
 #include <string.h>
 #include <fcntl.h>
@@ -30,7 +30,7 @@
 #define MAXBUF 8192  /* max I/O buffer size */
 #define MAXFILETYPE 100
 #define NTHREADS 4
-#define SBUFSIZE 16
+#define JOBS_QUEUE_SIZE 16
 
 #define GET_METHOD "GET"
 #define HEAD_METHOD "HEAD"
@@ -38,9 +38,9 @@
 
 extern char **environ; /* defined by libc */
 
-sbuf_t sbuf; /* Shared bounded buffer of connected descriptors */
+tpool pool;
 
-void *thread(void *vargp);
+void thread(void *vargp);
 int doit(http_text *text);
 int parse_uri(char *uri, char *filename, char *cgiargs);
 void serve_static(char *method, int fd, char *filename, int filesize);
@@ -72,60 +72,53 @@ int main(int argc, char **argv)
   Signal(SIGCHLD, reap_child_process);
   Signal(SIGPIPE, SIG_IGN);
 
-  sbuf_init(&sbuf, SBUFSIZE);
-
-  pthread_t tid;
-  for (int i = 0; i < NTHREADS; i++)
-    Pthread_create(&tid, NULL, thread, NULL);
+  tpool_init(&pool, NTHREADS, JOBS_QUEUE_SIZE);
 
   listenfd = Open_listenfd(port);
+  printf("Server started\n");
   while (1)
   {
     connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *)&clientlen);
-    sbuf_insert(&sbuf, connfd);
+    printf("Accept connection %d\n", connfd);
+    tpool_push_job(&pool, thread, (void *)connfd);
   }
 }
 
-void *thread(void *vargp)
+void thread(void *connfd)
 {
-  Pthread_detach(pthread_self());
+  int fd = (int)connfd;
+  http_text text;
+  fd_set read_set;
 
-  while (1)
+  http_text_init(fd, &text);
+  Close(fd);
+  FD_ZERO(&read_set);
+  FD_SET(text.fd, &read_set);
+
+  do
   {
-    int fd = sbuf_remove(&sbuf);
-    http_text text;
-    fd_set read_set;
+    fd_set ready_set = read_set;
+    int nready = Select(text.fd + 1, &ready_set, NULL, NULL, NULL);
 
-    http_text_init(fd, &text);
-    Close(fd);
-    FD_ZERO(&read_set);
-    FD_SET(text.fd, &read_set);
-
-    do
+    if (nready == -1 && errno == EINTR)
+      continue;
+    if (FD_ISSET(text.fd, &ready_set))
     {
-      fd_set ready_set = read_set;
-      int nready = Select(text.fd + 1, &ready_set, NULL, NULL, NULL);
-
-      if (nready == -1 && errno == EINTR)
-        continue;
-      if (FD_ISSET(text.fd, &ready_set))
+      ssize_t res = http_consume(&text);
+      if (res == CRLF_HAPPENED)
       {
-        ssize_t res = http_consume(&text);
-        if (res == CRLF_HAPPENED)
-        {
-          doit(&text);
-          break;
-        }
-        else if (res == TEXT_END)
-          break;
-      }
-      else
+        doit(&text);
         break;
-    } while (1);
+      }
+      else if (res == TEXT_END)
+        break;
+    }
+    else
+      break;
+  } while (1);
 
-    FD_CLR(text.fd, &read_set);
-    http_text_free(&text);
-  }
+  FD_CLR(text.fd, &read_set);
+  http_text_free(&text);
 }
 
 int doit(http_text *text)
