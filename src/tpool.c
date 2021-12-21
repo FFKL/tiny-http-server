@@ -6,17 +6,28 @@
 
 #include "tpool.h"
 
+#define MAX_THREADS 16
+#define MIN_THREADS 2
+
 static job *tpool_pull_job(tpool *pool);
 
 static job_queue *job_queue_create(int n);
 static void job_queue_destroy(job_queue *queue);
 
 static void threads_create(tpool *pool, int n);
+static void threads_spawn(tpool *pool);
+static void threads_reduce(tpool *pool);
+
 static void thread_create(tpool *pool);
 static void *thread_routine(tpool *pool);
 
+static int is_power_of_two(int n);
+
 void tpool_init(tpool *pool, int threads_count, int queue_size)
 {
+  if (!is_power_of_two(threads_count))
+    app_error("Number of threads must be a power of two");
+
   Pthread_mutex_init(&pool->lock, NULL);
   Pthread_cond_init(&pool->threads_wait, NULL);
   pool->threads_alive = 0;
@@ -65,6 +76,10 @@ void tpool_push_job(tpool *pool, routine routine, routine_arg arg)
     Pthread_cond_wait(&pool->producers_wait, &pool->lock); // 💤
   queue->buf[(++queue->rear) % (queue->n)] = new_job;
   queue->filled += 1;
+
+  if (queue->filled == queue->n)
+    threads_spawn(pool);
+
   Pthread_cond_signal(&pool->threads_wait); // ⚡
 
   Pthread_mutex_unlock(&pool->lock); // 🔓
@@ -85,6 +100,24 @@ static void threads_create(tpool *pool, int n)
 {
   for (int i = 0; i < n; i++)
     thread_create(pool);
+}
+
+static void threads_spawn(tpool *pool)
+{
+  if (pool->threads_necessary == MAX_THREADS)
+    return;
+  pool->threads_necessary = pool->threads_necessary * 2;
+  threads_create(pool, pool->threads_necessary);
+  printf("Number of threads spawned to %d\n", pool->threads_necessary);
+}
+
+static void threads_reduce(tpool *pool)
+{
+  if (pool->threads_necessary == MIN_THREADS)
+    return;
+  pool->threads_necessary = pool->threads_necessary / 2;
+  Pthread_cond_broadcast(&pool->threads_wait);
+  printf("Number of threads reduced to %d\n", pool->threads_necessary);
 }
 
 static void thread_create(tpool *pool)
@@ -118,6 +151,9 @@ static void *thread_routine(tpool *pool)
     }
 
     job *job = tpool_pull_job(pool);
+
+    if (pool->queue->filled == 0)
+      threads_reduce(pool);
     printf("Thread %ld: Start the job\n", Pthread_self());
     Pthread_cond_signal(&pool->producers_wait); // ⚡
 
@@ -129,4 +165,9 @@ static void *thread_routine(tpool *pool)
   }
 
   return NULL;
+}
+
+static int is_power_of_two(int n)
+{
+  return n && !(n & (n - 1));
 }
