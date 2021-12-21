@@ -12,13 +12,13 @@
 
 void unix_error(char *msg) /* Unix-style error */
 {
-    fprintf(stderr, "%s: %s\n", msg, strerror(errno));
+    fprintf(stderr, "%s: [%d] %s\n", msg, errno, strerror(errno));
     exit(1);
 }
 
 void posix_error(int code, char *msg) /* Posix-style error */
 {
-    fprintf(stderr, "%s: %s\n", msg, strerror(code));
+    fprintf(stderr, "%s: [%d] %s\n", msg, code, strerror(code));
     exit(1);
 }
 
