@@ -290,7 +290,8 @@ void serve_dynamic(int fd, char *filename, char *cgiargs, http_message *msg)
   Rio_writen(fd, buf, strlen(buf));
 
   int pipe_fd[2];
-  pipe(pipe_fd);
+  Pipe(pipe_fd);
+  Write(pipe_fd[1], msg->body, strlen(msg->body));
 
   if (Fork() == 0)
   { /* child */
@@ -305,7 +306,6 @@ void serve_dynamic(int fd, char *filename, char *cgiargs, http_message *msg)
   else
   {
     Close(pipe_fd[0]);
-    Write(pipe_fd[1], msg->body, strlen(msg->body));
     Close(pipe_fd[1]);
   }
 }
